@@ -69,7 +69,10 @@
   let microphoneStream = null;
   let silenceStart = Date.now();
   let silenceThreshold = 0.02; // Adjust based on testing
+
   const SILENCE_DURATION = 2000; // 2 seconds
+  let micMode = "transcription"; // 'transcription' | 'qa'
+  let qaSession = null; // For Gemini Nano
 
   // Twitter-specific state
   const twitterGqlCache = new Map(); // tweetId -> array of captured JSON blobs
@@ -2864,6 +2867,204 @@
       });
     }
   }
+
+  // Separate STT function for internal use (Q&A) to get text back
+  async function performSTT(audioBlob) {
+    if (!ENV || !ENV.ELEVEN_LABS_API_KEY) {
+      console.error("ElevenLabs API Key not found");
+      return null;
+    }
+    try {
+      showFloatingCard("Thinking...", "Listening to your question..."); // Show basic loading
+      const formData = new FormData();
+      formData.append("file", audioBlob, "recording.webm");
+      formData.append("model_id", "scribe_v1");
+
+      const response = await fetch(
+        "https://api.elevenlabs.io/v1/speech-to-text",
+        {
+          method: "POST",
+          headers: { "xi-api-key": ENV.ELEVEN_LABS_API_KEY },
+          body: formData,
+        },
+      );
+
+      if (!response.ok) throw new Error("STT Failed");
+      const data = await response.json();
+      return data.text;
+    } catch (e) {
+      console.error(e);
+      showFloatingCard("Error", "Speech recognition failed.");
+      return null;
+    }
+  }
+
+  async function handleQA(question) {
+    showFloatingCard("Gemini Nano Thinking...", question);
+
+    // 1. Get Page Content
+    let context = "";
+    try {
+      // Use Readability
+      const documentClone = document.cloneNode(true);
+      const reader = new Readability(documentClone);
+      const article = reader.parse();
+      context = article ? article.textContent : document.body.innerText;
+      // Truncate if too long (Nano has limits ~4k chars usually safe start, can go higher)
+      context = context.substring(0, 15000);
+    } catch (e) {
+      context = document.body.innerText.substring(0, 5000);
+    }
+
+    // 2. Call Window.ai
+    try {
+      // Check for window.ai or window.model (canary specific changes)
+      const ai = window.ai || window.model;
+      if (!ai || !ai.languageModel) {
+        showFloatingCard(
+          "Error",
+          "Chrome Built-in AI (Gemini Nano) not available. Check chrome://flags/#prompt-api-for-gemini-nano",
+        );
+        return;
+      }
+
+      const session = await ai.languageModel.create();
+      const prompt = `Context from current webpage:\n${context}\n\nUser Question: ${question}\n\nAnswer concisely based on the context:`;
+
+      const stream = session.promptStreaming(prompt);
+      let fullResponse = "";
+      for await (const chunk of stream) {
+        fullResponse = chunk;
+        showFloatingCard("🤖 Gemini Answer", fullResponse, true); // Update UI streaming
+      }
+    } catch (e) {
+      console.error("Gemini Error:", e);
+      showFloatingCard(
+        "Error",
+        "Gemini Nano failed to generate an answer. " + e.message,
+      );
+    }
+  }
+
+  // Floating Card UI
+  let floatingCard = null;
+  function showFloatingCard(title, content, showPlayBtn = false) {
+    if (!floatingCard) {
+      floatingCard = document.createElement("div");
+      floatingCard.id = "handsfree-qa-card";
+      floatingCard.style.cssText = `
+           position: fixed;
+           bottom: 100px;
+           left: 30px;
+           width: 320px;
+           background: rgba(255, 255, 255, 0.95);
+           backdrop-filter: blur(10px);
+           border-radius: 16px;
+           box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+           padding: 20px;
+           z-index: 2147483647;
+           font-family: system-ui, -apple-system, sans-serif;
+           transition: all 0.3s ease;
+           opacity: 0;
+           transform: translateY(20px);
+        `;
+
+      floatingCard.innerHTML = `
+           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <h3 style="margin:0; font-size:16px; font-weight:700; color:#333;" id="qa-title"></h3>
+              <button id="qa-close" style="background:none; border:none; color:#666; cursor:pointer; font-size:18px;">&times;</button>
+           </div>
+           <div id="qa-content" style="font-size:14px; color:#444; line-height:1.5; max-height:200px; overflow-y:auto;"></div>
+           <div id="qa-actions" style="margin-top:12px; display:none; justify-content:flex-end;">
+               <button id="qa-speak" style="background:#6366f1; color:white; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:6px;">
+                 🔊 Play Answer
+               </button>
+           </div>
+        `;
+      document.body.appendChild(floatingCard);
+
+      document.getElementById("qa-close").addEventListener("click", () => {
+        floatingCard.style.opacity = "0";
+        floatingCard.style.transform = "translateY(20px)";
+        setTimeout(() => floatingCard.classList.add("hidden"), 300);
+      });
+
+      document.getElementById("qa-speak").addEventListener("click", () => {
+        const text = document.getElementById("qa-content").innerText;
+        speakText(text);
+      });
+    }
+
+    floatingCard.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      floatingCard.style.opacity = "1";
+      floatingCard.style.transform = "translateY(0)";
+    });
+
+    document.getElementById("qa-title").innerText = title;
+    document.getElementById("qa-content").innerText = content;
+
+    const actionsDiv = document.getElementById("qa-actions");
+    if (showPlayBtn) {
+      actionsDiv.style.display = "flex";
+    } else {
+      actionsDiv.style.display = "none";
+    }
+  }
+
+  // 11Labs TTS Logic
+  async function speakText(text) {
+    if (!ENV || !ENV.ELEVEN_LABS_API_KEY) return;
+    const btn = document.getElementById("qa-speak");
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "⏳ Generating...";
+    btn.disabled = true;
+
+    try {
+      // Voice ID: '21m00Tcm4TlvDq8ikWAM' (Rachel - Default)
+      const response = await fetch(
+        "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
+        {
+          method: "POST",
+          headers: {
+            "xi-api-key": ENV.ELEVEN_LABS_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            text: text,
+            model_id: "eleven_monolingual_v1",
+            voice_settings: { stability: 0.5, similarity_boost: 0.5 },
+          }),
+        },
+      );
+
+      if (!response.ok) throw new Error("TTS Failed");
+      const blob = await response.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      audio.play();
+
+      btn.innerHTML = "▶ Playing...";
+      audio.onended = () => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      };
+    } catch (e) {
+      console.error(e);
+      btn.innerHTML = "❌ Error";
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }, 2000);
+    }
+  }
+
+  // Listen for Mic Mode updates
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === "MIC_MODE_CHANGED") {
+      micMode = message.mode;
+      console.log("Mic mode updated:", micMode);
+    }
+  });
 
   // Initialize Mic Button
   if (document.readyState === "loading") {

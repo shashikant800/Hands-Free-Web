@@ -9,7 +9,8 @@ let settings = {
   displayMode: "tooltip",
   gazeEnabled: false,
   gazeDwellMs: 600,
-  smartFeaturesEnabled: true, // PARAMETER (Default state for Smart Features)
+  smartFeaturesEnabled: true,
+  micMode: "transcription", // 'transcription' or 'qa'
 };
 
 let currentContent = {
@@ -417,6 +418,39 @@ function setupEventListeners() {
       });
     });
   }
+
+  // Mic Mode toggle
+  document.querySelectorAll('input[name="mic-mode"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      settings.micMode = e.target.value;
+      saveSettings();
+      console.log("[Sidepanel] Mic mode changed:", settings.micMode);
+
+      // Notify content script
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs
+            .sendMessage(tabs[0].id, {
+              type: "MIC_MODE_CHANGED",
+              mode: settings.micMode,
+            })
+            .catch(() => {
+              // Ignore if content script not ready
+            });
+        }
+      });
+    });
+  });
+
+  // Load Mic Mode from settings
+  if (settings.micMode === "qa") {
+    const radioQA = document.getElementById("mode-qa");
+    if (radioQA) radioQA.checked = true;
+  } else {
+    const radioTrans = document.getElementById("mode-transcription");
+    if (radioTrans) radioTrans.checked = true;
+  }
+}
 
   // Clear Transcription
   const clearTransBtn = document.getElementById("clear-transcription");
