@@ -792,7 +792,7 @@
           facingMode: "user",
           width: { ideal: 320 },
           height: { ideal: 240 },
-          frameRate: { ideal: 60, max: 60 }, // Increased to 60 FPS for ultra-smooth tracking
+          frameRate: { ideal: 30, max: 30 }, // Reduced to 30 FPS to save battery/reduce heat
         },
         audio: false,
       });
