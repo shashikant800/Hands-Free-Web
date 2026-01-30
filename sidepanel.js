@@ -417,6 +417,17 @@ function setupEventListeners() {
       });
     });
   }
+
+  // Clear Transcription
+  const clearTransBtn = document.getElementById("clear-transcription");
+  if (clearTransBtn) {
+    clearTransBtn.addEventListener("click", () => {
+      const container = document.getElementById("transcription-container");
+      const textField = document.getElementById("transcription-text");
+      if (textField) textField.innerText = "";
+      if (container) container.classList.add("hidden");
+    });
+  }
 }
 
 // Toggle prompt container
@@ -452,6 +463,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "GAZE_STATUS") {
     updateGazeStatus(message.phase, message.note);
+  }
+
+  // Transcription Messages
+  if (message.type === "TRANSCRIPTION_RECORDING_STARTED") {
+    const indicator = document.getElementById("recording-dash-indicator");
+    const container = document.getElementById("transcription-container");
+    if (container) container.classList.remove("hidden");
+    if (indicator) indicator.classList.remove("hidden");
+  }
+
+  if (message.type === "TRANSCRIPTION_RECORDING_STOPPED") {
+    const indicator = document.getElementById("recording-dash-indicator");
+    if (indicator) indicator.classList.add("hidden");
+  }
+
+  if (message.type === "TRANSCRIPTION_RESULT") {
+    const container = document.getElementById("transcription-container");
+    const textField = document.getElementById("transcription-text");
+    if (container) container.classList.remove("hidden");
+    if (textField) {
+      // Append or replace? "transcription will be shown" -> usually cumulative or replace.
+      // Given the "2 sec pause" flow, likely one chunk. I'll replace for clarity, or append with newline.
+      // User said "transcription will be shown".
+      textField.innerText = message.text;
+    }
   }
 });
 

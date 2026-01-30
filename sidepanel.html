@@ -13,13 +13,24 @@
   <body>
     <div id="container">
       <!-- Header with Branding -->
-      <div id="handsfree-header">
+      <div id="handsfree-header" class="compact-header">
         <img
           src="icons/icon-48.png"
           alt="HandsFreeWeb"
           class="handsfree-logo"
         />
         <h2 class="handsfree-title">HandsFreeWeb</h2>
+      </div>
+
+      <!-- Transcription Section -->
+      <div id="transcription-container" class="hidden">
+        <div class="transcription-header">
+          <span class="recording-indicator hidden" id="recording-dash-indicator"
+            >● Recording...</span
+          >
+          <button id="clear-transcription" class="icon-btn">×</button>
+        </div>
+        <div id="transcription-text" class="transcription-content"></div>
       </div>
 
       <!-- Head Tracking Section (Main Feature First!) -->

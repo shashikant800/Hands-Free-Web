@@ -9,23 +9,15 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": [
-    "sidePanel",
-    "storage",
-    "tabs",
-    "scripting",
-    "webNavigation"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "permissions": ["sidePanel", "storage", "tabs", "scripting", "webNavigation"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["lib/Readability.js", "content.js"],
+      "js": ["env.js", "lib/Readability.js", "content.js"],
       "run_at": "document_idle"
     },
     {
@@ -59,22 +51,25 @@
       "128": "icons/icon-128.png"
     }
   },
-  "web_accessible_resources": [{
-    "resources": [
-      "lib/Readability.js", 
-      "youtube/youtube-inject-page.js",
-      "youtube/youtube-caption-handler.js",
-      "twitter/twitter-interceptor.js",
-      "lib/webgazer.js",
-      "vendor/clmtrackr.js"
-    ],
-    "matches": ["<all_urls>"]
-  }, {
-    "resources": [
-      "gaze/gaze-overlay.css",
-      "gaze/human/human.esm.js",
-      "gaze/human/models/*"
-    ],
-    "matches": ["<all_urls>"]
-  }]
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/Readability.js",
+        "youtube/youtube-inject-page.js",
+        "youtube/youtube-caption-handler.js",
+        "twitter/twitter-interceptor.js",
+        "lib/webgazer.js",
+        "vendor/clmtrackr.js"
+      ],
+      "matches": ["<all_urls>"]
+    },
+    {
+      "resources": [
+        "gaze/gaze-overlay.css",
+        "gaze/human/human.esm.js",
+        "gaze/human/models/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

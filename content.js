@@ -59,6 +59,18 @@
   let displayTimes = new Map(); // Track when each URL was displayed (url -> timestamp)
   let hoverTimeouts = new Map(); // Track hover timeouts per URL (url -> {timeoutId, requestToken})
 
+  // Transcription State
+  let isRecording = false;
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let silenceTimer = null;
+  let audioContext = null;
+  let analyser = null;
+  let microphoneStream = null;
+  let silenceStart = Date.now();
+  let silenceThreshold = 0.02; // Adjust based on testing
+  const SILENCE_DURATION = 2000; // 2 seconds
+
   // Twitter-specific state
   const twitterGqlCache = new Map(); // tweetId -> array of captured JSON blobs
   let twitterInterceptorInstalled = false;
@@ -2607,5 +2619,256 @@
         }
       },
     );
+  }
+
+  // ===========================================
+  // TRANSCRIPTION FEATURE (11Labs Scribe)
+  // ===========================================
+
+  function createMicButton() {
+    if (document.getElementById("handsfree-mic-btn")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "handsfree-mic-btn";
+    btn.innerHTML = `
+       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 4v6c0 1.66 1.34 3 3 3z"/>
+         <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+       </svg>
+     `;
+    btn.title = "Start/Stop Transcription";
+    btn.style.cssText = `
+       position: fixed;
+       bottom: 20px;
+       left: 20px;
+       width: 56px;
+       height: 56px;
+       border-radius: 50%;
+       background: #6366f1;
+       color: white;
+       border: none;
+       box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+       z-index: 2147483647;
+       cursor: pointer;
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+     `;
+
+    btn.addEventListener("mouseenter", () => {
+      btn.style.transform = "scale(1.1)";
+    });
+    btn.addEventListener("mouseleave", () => {
+      btn.style.transform = "scale(1)";
+    });
+
+    btn.addEventListener("click", toggleTranscription);
+
+    document.body.appendChild(btn);
+  }
+
+  async function toggleTranscription() {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      microphoneStream = stream;
+
+      // Setup Audio Context for Silence Detection
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+
+      const bufferLength = analyser.fftSize;
+      const dataArray = new Uint8Array(bufferLength);
+
+      // Setup MediaRecorder
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: "audio/webm" }); // Chrome supports webm
+        isRecording = false;
+        updateMicButtonState(false);
+        stopSilenceDetection();
+
+        // Notify sidebar
+        chrome.runtime.sendMessage({ type: "TRANSCRIPTION_RECORDING_STOPPED" });
+
+        // Upload to 11Labs
+        await transcribeAudio(audioBlob);
+      };
+
+      mediaRecorder.start();
+      isRecording = true;
+      updateMicButtonState(true);
+
+      // Notify sidebar
+      chrome.runtime.sendMessage({ type: "TRANSCRIPTION_RECORDING_STARTED" });
+
+      // Start Silence Detection Loop
+      checkSilence(dataArray, bufferLength);
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      alert("Could not access microphone. Please allow permission.");
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+    }
+    if (microphoneStream) {
+      microphoneStream.getTracks().forEach((track) => track.stop());
+    }
+    if (audioContext) {
+      audioContext.close();
+    }
+  }
+
+  function checkSilence(dataArray, bufferLength) {
+    if (!isRecording) return;
+
+    analyser.getByteTimeDomainData(dataArray);
+
+    let sum = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      const x = (dataArray[i] - 128) / 128.0;
+      sum += x * x;
+    }
+    const rms = Math.sqrt(sum / bufferLength);
+
+    // Threshold can be tweaked. 0.02 is checking for very low volume.
+    if (rms < silenceThreshold) {
+      if (Date.now() - silenceStart > SILENCE_DURATION) {
+        // Silence detected for 2 seconds
+        console.log("Silence detected, stopping recording...");
+        stopRecording();
+        return;
+      }
+    } else {
+      silenceStart = Date.now();
+    }
+
+    silenceTimer = requestAnimationFrame(() =>
+      checkSilence(dataArray, bufferLength),
+    );
+  }
+
+  function stopSilenceDetection() {
+    if (silenceTimer) cancelAnimationFrame(silenceTimer);
+  }
+
+  function updateMicButtonState(recording) {
+    const btn = document.getElementById("handsfree-mic-btn");
+    if (!btn) return;
+
+    if (recording) {
+      btn.style.background = "#ef4444"; // Red for recording
+      btn.innerHTML = `
+        <div style="width: 20px; height: 20px; background: white; border-radius: 4px;"></div>
+      `;
+      btn.classList.add("recording-pulse");
+
+      // Add pulse animation style if not exists
+      if (!document.getElementById("mic-pulse-style")) {
+        const style = document.createElement("style");
+        style.id = "mic-pulse-style";
+        style.textContent = `
+          @keyframes micPulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+          }
+          .recording-pulse {
+            animation: micPulse 1.5s infinite;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    } else {
+      btn.style.background = "#6366f1";
+      btn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 4v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+      `;
+      btn.classList.remove("recording-pulse");
+    }
+  }
+
+  async function transcribeAudio(audioBlob) {
+    if (!ENV || !ENV.ELEVEN_LABS_API_KEY) {
+      console.error("ElevenLabs API Key not found in ENV");
+      chrome.runtime.sendMessage({
+        type: "TRANSCRIPTION_RESULT",
+        text: "Error: API Key not configured.",
+      });
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("file", audioBlob, "recording.webm");
+      formData.append("model_id", "scribe_v1"); // Verify model name for Scribe
+      // According to search, it might be different, but sticking to prompt instructions or standard STT.
+      // Search result said: "client.speech_to_text.convert(model_id='scribe_v1'...)"
+      // So endpoint is likely v1/speech-to-text
+
+      const response = await fetch(
+        "https://api.elevenlabs.io/v1/speech-to-text",
+        {
+          method: "POST",
+          headers: {
+            "xi-api-key": ENV.ELEVEN_LABS_API_KEY,
+          },
+          body: formData,
+        },
+      );
+
+      if (!response.ok) {
+        const err = await response.json();
+        console.error("Transcription failed:", err);
+        throw new Error(err.detail?.message || "Transcription failed");
+      }
+
+      const data = await response.json();
+      console.log("Transcription result:", data);
+
+      // Send text to sidebar
+      chrome.runtime.sendMessage({
+        type: "TRANSCRIPTION_RESULT",
+        text: data.text || "No speech detected.",
+      });
+    } catch (error) {
+      console.error("Transcription error:", error);
+      chrome.runtime.sendMessage({
+        type: "TRANSCRIPTION_RESULT",
+        text: "Error: " + error.message,
+      });
+    }
+  }
+
+  // Initialize Mic Button
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", createMicButton);
+  } else {
+    createMicButton();
   }
 })();
