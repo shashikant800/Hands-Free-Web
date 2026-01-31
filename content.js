@@ -2632,44 +2632,147 @@
   function createMicButton() {
     if (document.getElementById("handsfree-mic-btn")) return;
 
+    // Add premium styles
+    if (!document.getElementById("handsfree-mic-styles")) {
+      const style = document.createElement("style");
+      style.id = "handsfree-mic-styles";
+      style.textContent = `
+        @keyframes micPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7), 0 4px 20px rgba(99, 102, 241, 0.4); }
+          50% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0), 0 4px 20px rgba(99, 102, 241, 0.6); }
+        }
+        @keyframes recordingPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7), 0 4px 20px rgba(239, 68, 68, 0.4); }
+          50% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0), 0 4px 20px rgba(239, 68, 68, 0.6); }
+        }
+        @keyframes processingPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7), 0 4px 20px rgba(234, 179, 8, 0.4); }
+          50% { box-shadow: 0 0 0 12px rgba(234, 179, 8, 0), 0 4px 20px rgba(234, 179, 8, 0.6); }
+        }
+        @keyframes aiThinking {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7), 0 4px 20px rgba(16, 185, 129, 0.4); }
+          50% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0), 0 4px 20px rgba(16, 185, 129, 0.6); }
+        }
+        @keyframes audioWave {
+          0%, 100% { transform: scaleY(0.3); }
+          50% { transform: scaleY(1); }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes breathe {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.05); opacity: 0.9; }
+        }
+        #handsfree-mic-btn {
+          position: fixed;
+          bottom: 20px;
+          right: 140px;
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          background: linear-gradient(145deg, #6366f1, #4f46e5);
+          color: white;
+          border: none;
+          box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+          z-index: 2147483647;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          backdrop-filter: blur(10px);
+        }
+        #handsfree-mic-btn:hover {
+          transform: scale(1.08);
+        }
+        #handsfree-mic-btn.idle {
+          animation: breathe 3s ease-in-out infinite;
+        }
+        #handsfree-mic-btn.recording {
+          background: linear-gradient(145deg, #ef4444, #dc2626);
+          animation: recordingPulse 1s ease-in-out infinite;
+        }
+        #handsfree-mic-btn.processing {
+          background: linear-gradient(145deg, #eab308, #ca8a04);
+          animation: processingPulse 0.8s ease-in-out infinite;
+        }
+        #handsfree-mic-btn.ai-thinking {
+          background: linear-gradient(145deg, #10b981, #059669);
+          animation: aiThinking 1.2s ease-in-out infinite;
+        }
+        .mic-audio-bars {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          height: 24px;
+        }
+        .mic-audio-bars .bar {
+          width: 4px;
+          height: 24px;
+          background: white;
+          border-radius: 2px;
+          animation: audioWave 0.5s ease-in-out infinite;
+        }
+        .mic-audio-bars .bar:nth-child(1) { animation-delay: 0s; }
+        .mic-audio-bars .bar:nth-child(2) { animation-delay: 0.1s; }
+        .mic-audio-bars .bar:nth-child(3) { animation-delay: 0.2s; }
+        .mic-audio-bars .bar:nth-child(4) { animation-delay: 0.1s; }
+        .mic-audio-bars .bar:nth-child(5) { animation-delay: 0s; }
+        .mic-spinner {
+          width: 24px;
+          height: 24px;
+          border: 3px solid rgba(255,255,255,0.3);
+          border-top-color: white;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+        #handsfree-mic-status {
+          position: fixed;
+          bottom: 90px;
+          right: 90px;
+          background: rgba(0, 0, 0, 0.85);
+          color: white;
+          padding: 10px 16px;
+          border-radius: 20px;
+          font-family: system-ui, -apple-system, sans-serif;
+          font-size: 13px;
+          font-weight: 500;
+          z-index: 2147483647;
+          opacity: 0;
+          transform: translateY(10px);
+          transition: all 0.3s ease;
+          pointer-events: none;
+          max-width: 200px;
+          text-align: center;
+        }
+        #handsfree-mic-status.visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     const btn = document.createElement("button");
     btn.id = "handsfree-mic-btn";
+    btn.className = "idle";
     btn.innerHTML = `
-       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 4v6c0 1.66 1.34 3 3 3z"/>
-         <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-       </svg>
-     `;
-    btn.title = "Start/Stop Transcription";
-    btn.style.cssText = `
-       position: fixed;
-       bottom: 20px;
-       right: 20px;
-       width: 56px;
-       height: 56px;
-       border-radius: 50%;
-       background: #6366f1;
-       color: white;
-       border: none;
-       box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
-       z-index: 2147483647;
-       cursor: pointer;
-       display: flex;
-       align-items: center;
-       justify-content: center;
-       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-     `;
-
-    btn.addEventListener("mouseenter", () => {
-      btn.style.transform = "scale(1.1)";
-    });
-    btn.addEventListener("mouseleave", () => {
-      btn.style.transform = "scale(1)";
-    });
-
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="26" height="26">
+        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 4v6c0 1.66 1.34 3 3 3z"/>
+        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+      </svg>
+    `;
+    btn.title = "Voice Command";
     btn.addEventListener("click", toggleTranscription);
-
     document.body.appendChild(btn);
+
+    // Create status indicator
+    const status = document.createElement("div");
+    status.id = "handsfree-mic-status";
+    document.body.appendChild(status);
   }
 
   async function toggleTranscription() {
@@ -2723,34 +2826,34 @@
         );
 
         isRecording = false;
-        updateMicButtonState(false);
         stopSilenceDetection();
 
         // Check if we actually recorded something
         if (audioBlob.size < 1000) {
           console.error("[Mic] Recording too short or empty");
-          showStatusToast("❌ No audio captured. Please try again.");
-          setTimeout(hideStatusToast, 2000);
+          setMicState("error", "❌ No audio captured");
           return;
         }
 
         // Notify sidebar
         chrome.runtime.sendMessage({ type: "TRANSCRIPTION_RECORDING_STOPPED" });
 
-        // Show processing indicator
-        showStatusToast("🔄 Processing audio...");
+        // Show processing state
+        setMicState("processing");
 
         // Route based on mode
         if (micMode === "qa") {
           const text = await performSTT(audioBlob);
           if (text) {
-            handleQA(text);
+            setMicState("ai-thinking");
+            await handleQA(text);
           }
+          setMicState("idle");
         } else {
           // Standard Transcription
           await transcribeAudio(audioBlob);
+          setMicState("idle");
         }
-        hideStatusToast();
       };
 
       // Start with timeslice to ensure data is captured in chunks
@@ -2828,41 +2931,88 @@
   }
 
   function updateMicButtonState(recording) {
+    setMicState(recording ? "recording" : "idle");
+  }
+
+  // Premium state machine for mic button
+  // States: idle, recording, processing, ai-thinking, error
+  function setMicState(state, statusText = "") {
     const btn = document.getElementById("handsfree-mic-btn");
+    const status = document.getElementById("handsfree-mic-status");
     if (!btn) return;
 
-    if (recording) {
-      btn.style.background = "#ef4444"; // Red for recording
-      btn.innerHTML = `
-        <div style="width: 20px; height: 20px; background: white; border-radius: 4px;"></div>
-      `;
-      btn.classList.add("recording-pulse");
+    // Remove all state classes
+    btn.classList.remove("idle", "recording", "processing", "ai-thinking");
+    btn.style.background = ""; // Let CSS handle it
 
-      // Add pulse animation style if not exists
-      if (!document.getElementById("mic-pulse-style")) {
-        const style = document.createElement("style");
-        style.id = "mic-pulse-style";
-        style.textContent = `
-          @keyframes micPulse {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-          }
-          .recording-pulse {
-            animation: micPulse 1.5s infinite;
-          }
+    switch (state) {
+      case "recording":
+        btn.classList.add("recording");
+        btn.innerHTML = `
+          <div class="mic-audio-bars">
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+          </div>
         `;
-        document.head.appendChild(style);
-      }
-    } else {
-      btn.style.background = "#6366f1";
-      btn.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 4v6c0 1.66 1.34 3 3 3z"/>
-          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-        </svg>
-      `;
-      btn.classList.remove("recording-pulse");
+        showMicStatus(statusText || "🎤 Listening...");
+        break;
+
+      case "processing":
+        btn.classList.add("processing");
+        btn.innerHTML = `<div class="mic-spinner"></div>`;
+        showMicStatus(statusText || "⏳ Processing audio...");
+        break;
+
+      case "ai-thinking":
+        btn.classList.add("ai-thinking");
+        btn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="26" height="26">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+          </svg>
+        `;
+        showMicStatus(statusText || "🤖 AI is thinking...");
+        break;
+
+      case "error":
+        btn.style.background = "linear-gradient(145deg, #ef4444, #dc2626)";
+        btn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="26" height="26">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+        `;
+        showMicStatus(statusText || "❌ Error occurred");
+        setTimeout(() => setMicState("idle"), 3000);
+        break;
+
+      case "idle":
+      default:
+        btn.classList.add("idle");
+        btn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="26" height="26">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 4v6c0 1.66 1.34 3 3 3z"/>
+            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+          </svg>
+        `;
+        hideMicStatus();
+        break;
+    }
+  }
+
+  function showMicStatus(text) {
+    const status = document.getElementById("handsfree-mic-status");
+    if (status) {
+      status.textContent = text;
+      status.classList.add("visible");
+    }
+  }
+
+  function hideMicStatus() {
+    const status = document.getElementById("handsfree-mic-status");
+    if (status) {
+      status.classList.remove("visible");
     }
   }
 
@@ -2918,49 +3068,6 @@
     }
   }
 
-  // Status Toast for visual feedback
-  let statusToast = null;
-  function showStatusToast(message) {
-    if (!statusToast) {
-      statusToast = document.createElement("div");
-      statusToast.id = "handsfree-status-toast";
-      statusToast.style.cssText = `
-        position: fixed;
-        bottom: 90px;
-        right: 20px;
-        background: rgba(0, 0, 0, 0.85);
-        color: white;
-        padding: 12px 20px;
-        border-radius: 25px;
-        font-family: system-ui, -apple-system, sans-serif;
-        font-size: 14px;
-        font-weight: 500;
-        z-index: 2147483647;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        transition: all 0.3s ease;
-        opacity: 0;
-        transform: translateY(10px);
-      `;
-      document.body.appendChild(statusToast);
-    }
-    statusToast.textContent = message;
-    statusToast.style.display = "block";
-    requestAnimationFrame(() => {
-      statusToast.style.opacity = "1";
-      statusToast.style.transform = "translateY(0)";
-    });
-  }
-
-  function hideStatusToast() {
-    if (statusToast) {
-      statusToast.style.opacity = "0";
-      statusToast.style.transform = "translateY(10px)";
-      setTimeout(() => {
-        if (statusToast) statusToast.style.display = "none";
-      }, 300);
-    }
-  }
-
   // Separate STT function for internal use (Q&A) to get text back
   async function performSTT(audioBlob) {
     if (!ENV || !ENV.ELEVEN_LABS_API_KEY) {
@@ -2993,7 +3100,7 @@
   }
 
   async function handleQA(question) {
-    showFloatingCard("Gemini Nano Thinking...", question);
+    showFloatingCard("🤔 Thinking...", question);
 
     // 1. Get Page Content
     let context = "";
@@ -3003,39 +3110,73 @@
       const reader = new Readability(documentClone);
       const article = reader.parse();
       context = article ? article.textContent : document.body.innerText;
-      // Truncate if too long (Nano has limits ~4k chars usually safe start, can go higher)
-      context = context.substring(0, 15000);
+      // Truncate for API limits
+      context = context.substring(0, 8000);
     } catch (e) {
       context = document.body.innerText.substring(0, 5000);
     }
 
-    // 2. Call Window.ai
+    const prompt = `Context from current webpage:\n${context}\n\nUser Question: ${question}\n\nAnswer concisely based on the context:`;
+
+    // 2. Try Gemini Cloud API first (gemini-1.5-flash is free)
+    if (ENV && ENV.GEMINI_API_KEY) {
+      try {
+        showFloatingCard("☁️ Gemini API...", question);
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${ENV.GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                maxOutputTokens: 500,
+                temperature: 0.7,
+              },
+            }),
+          },
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const answer =
+            data.candidates?.[0]?.content?.parts?.[0]?.text ||
+            "No answer generated.";
+          showFloatingCard("🤖 Gemini Answer", answer, true);
+          return;
+        } else {
+          console.warn(
+            "Gemini API failed, trying Nano...",
+            await response.text(),
+          );
+        }
+      } catch (e) {
+        console.warn("Gemini API error, trying Nano...", e);
+      }
+    }
+
+    // 3. Fallback to Chrome Built-in AI (Gemini Nano)
     try {
-      // Check for window.ai or window.model (canary specific changes)
+      showFloatingCard("🧠 Local AI...", question);
       const ai = window.ai || window.model;
       if (!ai || !ai.languageModel) {
         showFloatingCard(
           "Error",
-          "Chrome Built-in AI (Gemini Nano) not available. Check chrome://flags/#prompt-api-for-gemini-nano",
+          "No AI available. Add GEMINI_API_KEY to env.js or enable chrome://flags/#prompt-api-for-gemini-nano",
         );
         return;
       }
 
       const session = await ai.languageModel.create();
-      const prompt = `Context from current webpage:\n${context}\n\nUser Question: ${question}\n\nAnswer concisely based on the context:`;
-
       const stream = session.promptStreaming(prompt);
       let fullResponse = "";
       for await (const chunk of stream) {
         fullResponse = chunk;
-        showFloatingCard("🤖 Gemini Answer", fullResponse, true); // Update UI streaming
+        showFloatingCard("🤖 Gemini Answer", fullResponse, true);
       }
     } catch (e) {
-      console.error("Gemini Error:", e);
-      showFloatingCard(
-        "Error",
-        "Gemini Nano failed to generate an answer. " + e.message,
-      );
+      console.error("Gemini Nano Error:", e);
+      showFloatingCard("Error", "AI failed. " + e.message);
     }
   }
 
