@@ -450,7 +450,6 @@ function setupEventListeners() {
     const radioTrans = document.getElementById("mode-transcription");
     if (radioTrans) radioTrans.checked = true;
   }
-}
 
   // Clear Transcription
   const clearTransBtn = document.getElementById("clear-transcription");

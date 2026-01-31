@@ -518,6 +518,7 @@ hr {
   );
   outline: none;
   -webkit-appearance: none;
+  appearance: none;
   margin: 12px 0;
   cursor: pointer;
 }

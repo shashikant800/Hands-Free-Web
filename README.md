@@ -152,6 +152,10 @@ Link Hover → Fetch Page → Extract Content (Readability.js)
 
 ---
 
+## Architecture
+
+![Architecture Diagram](./architecture.png)
+
 ## Tech Stack
 
 | Component          | Technology                                                            |
