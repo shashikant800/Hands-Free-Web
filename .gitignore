@@ -57,3 +57,16 @@ build/
 
 /env.js
 env.js
+
+# Unnecessary folders (not used by extension)
+Archive/
+experiments/
+test/
+utils/
+.claude/
+vendor/
+
+# Presentation files
+*.pptx
+create_ppt.py
+PPT_CONTENT.md

@@ -2694,21 +2694,44 @@
       const bufferLength = analyser.fftSize;
       const dataArray = new Uint8Array(bufferLength);
 
-      // Setup MediaRecorder
-      mediaRecorder = new MediaRecorder(stream);
+      // Setup MediaRecorder with proper MIME type for 11Labs
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : "audio/ogg;codecs=opus";
+
+      console.log("[Mic] Using MIME type:", mimeType);
+      mediaRecorder = new MediaRecorder(stream, { mimeType });
       audioChunks = [];
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunks.push(event.data);
+          console.log("[Mic] Audio chunk received:", event.data.size, "bytes");
         }
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+        const audioBlob = new Blob(audioChunks, { type: mimeType });
+        console.log(
+          "[Mic] Final audio blob:",
+          audioBlob.size,
+          "bytes, type:",
+          audioBlob.type,
+        );
+
         isRecording = false;
         updateMicButtonState(false);
         stopSilenceDetection();
+
+        // Check if we actually recorded something
+        if (audioBlob.size < 1000) {
+          console.error("[Mic] Recording too short or empty");
+          showStatusToast("❌ No audio captured. Please try again.");
+          setTimeout(hideStatusToast, 2000);
+          return;
+        }
 
         // Notify sidebar
         chrome.runtime.sendMessage({ type: "TRANSCRIPTION_RECORDING_STOPPED" });
@@ -2729,7 +2752,8 @@
         hideStatusToast();
       };
 
-      mediaRecorder.start();
+      // Start with timeslice to ensure data is captured in chunks
+      mediaRecorder.start(250); // capture every 250ms
       isRecording = true;
       updateMicButtonState(true);
 
